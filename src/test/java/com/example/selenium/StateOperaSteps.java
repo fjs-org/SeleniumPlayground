@@ -42,8 +42,9 @@ public class StateOperaSteps {
     public void i_open_the_calendar_page() {
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
-        options.addArguments("--headless");
-
+        options.addArguments("--headless=new"); // The 'new' flag is recommended for latest Chrome
+        options.addArguments("--no-sandbox");
+        options.addArguments("--disable-dev-shm-usage");
         driver = new ChromeDriver(options);
         driver.get("https://www.wiener-staatsoper.at/kalender/2026/maerz/");
         acceptCookies();
