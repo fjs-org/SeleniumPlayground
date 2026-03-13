@@ -42,9 +42,10 @@ public class StateOperaSteps {
     public void i_open_the_calendar_page() {
         WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
-        options.addArguments("--headless=new"); // The 'new' flag is recommended for latest Chrome
-        options.addArguments("--no-sandbox");
-        options.addArguments("--disable-dev-shm-usage");
+        options.addArguments("--headless=new"); // Run without a GUI
+        options.addArguments("--no-sandbox"); // bypass OS security model (required for Docker)
+        options.addArguments("--disable-dev-shm-usage"); // overcome limited resource problems
+        options.addArguments("--remote-allow-origins=*"); // prevents 403 Forbidden errors
         driver = new ChromeDriver(options);
         driver.get("https://www.wiener-staatsoper.at/kalender/2026/maerz/");
         acceptCookies();
