@@ -19,9 +19,7 @@ RUN ls -la target/
 FROM nginx:alpine
 
 # Copy the build output to Nginx's html folder
-# Replace 'your-app-name' with the name found in your angular.json
-
-COPY --from=build /target/index.html /usr/share/nginx/html
+COPY --from=build /target /usr/share/nginx/html
 
 # Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
