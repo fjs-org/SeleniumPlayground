@@ -1,0 +1,74 @@
+name: mvn-Test plus Docker build and push
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v5
+
+      - name: List files after checkout
+        run: ls -lart
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Extract Maven version
+        id: prep-mvn-version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west3-docker.pkg.dev
+
+      - name: Build and Push Docker image
+        id: build-and-push-image
+        run: |
+          IMAGE_URI="europe-west3-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fj-image-repo/selenium-stateopera:${{ steps.prep-mvn-version.outputs.VERSION }}"
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_URI")
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "IMAGE_DIGEST=$DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Job Summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkout | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          echo "| Maven Build & Test | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build & Push | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Maven Version**: \`${{ steps.prep-mvn-version.outputs.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Image**: \`${{ steps.build-and-push-image.outputs.IMAGE_URI }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Digest**: \`${{ steps.build-and-push-image.outputs.IMAGE_DIGEST }}\`" >> $GITHUB_STEP_SUMMARY

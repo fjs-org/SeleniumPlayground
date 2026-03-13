@@ -1,0 +1,13 @@
+# IntelliJ IDEA internals
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Java build artifacts
+target/
+
+# Exceptions (Keep these if you want to share project-wide settings)
+# !.idea/runConfigurations/
+# !.idea/copyright/
+# !.idea/scopes/
