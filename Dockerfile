@@ -7,6 +7,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y maven
 
 # Build the app
+RUN pwd
+RUN ls -lart
 COPY src ./src
 RUN mvn clean test
 RUN ls -la target/
