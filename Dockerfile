@@ -3,13 +3,14 @@
 FROM eclipse-temurin:25-jdk AS build
 WORKDIR /app
 
-# Install Maven manually (this ensures you have exactly what you need)
-RUN apt-get update && apt-get install -y maven
-
+# Install Maven, Chrome dependencies and Chrome itself
+RUN apt-get update && apt-get install -y maven wget gnupg \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
 
 # Build the app
-RUN pwd
-RUN ls -lart
 COPY . .
 RUN mvn clean test
 RUN ls -la target/
