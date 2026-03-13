@@ -6,6 +6,7 @@ WORKDIR /app
 # Install Maven manually (this ensures you have exactly what you need)
 RUN apt-get update && apt-get install -y maven
 
+
 # Build the app
 RUN pwd
 RUN ls -lart
