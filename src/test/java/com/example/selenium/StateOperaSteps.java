@@ -9,6 +9,7 @@ import io.cucumber.java.en.When;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.jupiter.api.Assertions;
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
@@ -24,7 +25,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @SpringBootTest
 public class StateOperaSteps {
@@ -58,14 +62,116 @@ public class StateOperaSteps {
         takeScreenshot(driver, "after_accept_cookies");
     }
 
-    @When("I search for buttons with text {string}")
-    public void i_search_for_buttons_with_text(String buttonText) {
-        List<WebElement> buttons = driver.findElements(
-            By.xpath("//button[contains(text(), '" + buttonText + "')] | //a[contains(text(), '" + buttonText + "')]")
+    @When("I scroll to the end of the page, I want to see each event with date and title")
+    public void i_scroll_to_see_each_event_with_date_and_title() throws InterruptedException {
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+
+        long totalHeight = ((Number) js.executeScript("return document.body.scrollHeight")).longValue();
+        long viewportHeight = ((Number) js.executeScript("return window.innerHeight")).longValue();
+        long scrollPosition = 0L;
+
+        log.info("Scrolling to end of page to view each event (total height: {}px)", totalHeight);
+
+        int screenshotCount = 1;
+        while (scrollPosition < totalHeight - viewportHeight) {
+            scrollPosition = Math.min(scrollPosition + 500L, totalHeight - viewportHeight);
+            js.executeScript("window.scrollTo(0, " + scrollPosition + ");");
+            Thread.sleep(100);
+            takeScreenshot(driver, "scroll_step_" + (screenshotCount++));
+        }
+
+        long newHeight = ((Number) Objects.requireNonNull(js.executeScript("return document.body.scrollHeight"))).longValue();
+        while (newHeight > totalHeight) {
+            log.info("Page content expanded to {}px, continuing scroll", newHeight);
+            totalHeight = newHeight;
+            while (scrollPosition < totalHeight - viewportHeight) {
+                scrollPosition = Math.min(scrollPosition + 500L, totalHeight - viewportHeight);
+                js.executeScript("window.scrollTo(0, " + scrollPosition + ");");
+                Thread.sleep(200);
+                takeScreenshot(driver, "scroll_step_" + (screenshotCount++));
+            }
+            Thread.sleep(1500);
+            newHeight = ((Number) Objects.requireNonNull(js.executeScript("return document.body.scrollHeight"))).longValue();
+        }
+
+        log.info("Reached end of page, all events should be visible with date and title");
+
+        List<String> events = extractEventsWithDateAndTitle(js);
+
+        log.info("==================== EVENTS FOUND: {} ====================", events.size());
+        for (String event : events) {
+            log.info("### Event: {}", event);
+        }
+        log.info("===========================================================");
+
+        takeScreenshot(driver, "all_events_visible");
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> extractEventsWithDateAndTitle(JavascriptExecutor js) {
+        List<Map<String, String>> rawEvents = (List<Map<String, String>>) js.executeScript(
+            "var events = [];" +
+            "var containers = document.querySelectorAll('[class*=teaser], [class*=event-list], [class*=calendar], [class*=performance]');" +
+            "containers.forEach(function(container) {" +
+            "  var titleEl = container.querySelector('h2, h3, h4, [class*=title]');" +
+            "  var title = titleEl ? titleEl.textContent.trim() : '';" +
+            "  var dateParts = [];" +
+            "  var dateEls = container.querySelectorAll('time, [class*=date], [class*=day]');" +
+            "  dateEls.forEach(function(d) { dateParts.push(d.textContent.trim()); });" +
+            "  if (title && title.length > 3 && title.length < 80) {" +
+            "    events.push({" +
+            "      title: title," +
+            "      date: dateParts.join(' ')" +
+            "    });" +
+            "  }" +
+            "});" +
+            "if (events.length === 0) {" +
+            "  var allTexts = document.querySelectorAll('h2, h3');" +
+            "  allTexts.forEach(function(el) {" +
+            "    var t = el.textContent.trim();" +
+            "    if (t.length > 3 && t.length < 80) {" +
+            "      events.push({title: t, date: ''});" +
+            "    }" +
+            "  });" +
+            "}" +
+            "return events;"
         );
-        log.info("Found {} button(s) with text '{}'", buttons.size(), buttonText);
-        takeScreenshot(driver, "buttons_found");
-        Assertions.assertFalse(buttons.isEmpty(), "Expected to find buttons with text '" + buttonText + "'");
+
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < rawEvents.size(); i++) {
+            Map<String, String> event = rawEvents.get(i);
+            String date = event.getOrDefault("date", "").replaceAll("\\s+", " ").trim();
+            String title = event.getOrDefault("title", "").replaceAll("\\s+", " ").trim();
+            if (date.isEmpty()) {
+                result.add(String.format("%d. %s", i + 1, title));
+            } else {
+                result.add(String.format("%d. [%s] %s", i + 1, date, title));
+            }
+        }
+        return result;
+    }
+
+    @Then("the last event this month should be {string}")
+    public void the_last_event_this_month_should_be(String expectedEventTitle) throws InterruptedException {
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+        List<String> events = extractEventsWithDateAndTitle(js);
+
+        Assertions.assertFalse(events.isEmpty(), "No events found on the page");
+
+        String lastEvent = events.getLast();
+        log.info("Last event on page: {}", lastEvent);
+
+        boolean found = lastEvent.toLowerCase().contains(expectedEventTitle.toLowerCase());
+
+        if (!found) {
+            log.info("Expected '{}' not found in last event '{}'", expectedEventTitle, lastEvent);
+            takeScreenshot(driver, "last_event_mismatch");
+        }
+
+        Assertions.assertTrue(found,
+            String.format("Expected last event to contain '%s' but was '%s'", expectedEventTitle, lastEvent));
+
+        takeScreenshot(driver, "last_event_verified");
     }
 
     @Then("I should find at least one Details button")
